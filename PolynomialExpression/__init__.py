@@ -1,1 +1,2 @@
 from .PolynomialExpression import PolynomialExpression
+from .Exceptions import InvalidExpressionException, UnequalPowersException
