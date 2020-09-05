@@ -7,12 +7,12 @@ if __name__ == '__main__':
     #     print("Usage: ./computor.py <equation>")
     #     exit(1)
 
-    stdin = "3*x^0.9 - 7*x^0.9 + 3*x^2= 0*x^2"
+    stdin = "-2 * x^0 + 7 * x^1 -6 * x^2 = 0*x^0 + 1 *x^1 + 2 * x^2"
     expression = None
     try:
         expression = Pe.PolynomialExpression(stdin)
         print(expression)
-        expression.simplify_polynome()
+        expression.simplify_expression()
     except Pe.InvalidExpressionException or Pe.UnequalPowersException as e:
         print(f"{type(e).__name__} - {e}")
         exit(1)
