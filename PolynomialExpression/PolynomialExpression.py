@@ -42,7 +42,7 @@ class PolynomialExpression:
 
     def get_polynomial_degree(self) -> float:
         """Get the degree of the polynomial equation"""
-        return max([unit.power for unit in self.left_units + self.right_units])
+        return max([unit.power for unit in self.left_units + self.right_units] or [0])
 
     def get_left_powers(self) -> typing.List[float]:
         return sorted(list(set([unit.power for unit in self.left_units])))
@@ -52,6 +52,18 @@ class PolynomialExpression:
 
     def get_all_powers(self) -> typing.List[float]:
         return sorted(list(set(self.get_left_powers() + self.get_right_powers())))
+
+    def get_index_of_unit_of_power(self, power: float, unit_list):
+        if self.side_simplified is False:
+            self._simplify_sides()
+        for index, unit in enumerate(unit_list):
+            if unit.power == power:
+                return index
+        return None
+
+    def sort_expression(self):
+        self.left_units.sort(key=lambda unit: unit.power)
+        self.right_units.sort(key=lambda unit: unit.power)
 
     def _simplify_sides(self):
         """Simplify a side of the expression by merging same-powered units"""
@@ -63,30 +75,42 @@ class PolynomialExpression:
 
         self.side_simplified = True
 
-    def get_index_of_unit_of_power(self, power: float, unit_list):
-        if self.side_simplified is False:
-            self._simplify_sides()
-        for index, unit in enumerate(unit_list):
-            if unit.power == power:
-                return index
-        return None
-
     def simplify_expression(self):
         """Simplify the units of the polynome"""
 
         # Merging same power polynomes in each sides
-        self._simplify_sides()
+        if self.side_simplified is False:
+            self._simplify_sides()
+
+        # Since sides are simplified, we assume that there is only one unit per power per side
+        for power in self.get_all_powers():
+            left_index = self.get_index_of_unit_of_power(power, self.left_units)
+            right_index = self.get_index_of_unit_of_power(power, self.right_units)
+
+            # If not unit of this power is found, do nothing
+            if left_index is None and right_index is None:
+                continue
+
+            # if units of this power is found left but not right, do nothing
+            elif left_index is not None and right_index is None:
+                continue
+
+            # if a unit of this power is found right but not left, pass it left
+            elif left_index is None and right_index is not None:
+                self.left_units.append(PolynomialExpression.PolynomialUnit
+                                       .from_values(-1 * self.right_units[right_index].value, power))
+                self.right_units.pop(right_index)
+
+            # if units of this power are found on both sides, simplify them
+            else:
+                self.left_units[left_index] -= self.right_units[right_index]
+                self.right_units.pop(right_index)
+
         # Getting rid of 0-valued polynomes
         self.left_units = [unit for unit in self.left_units if unit != 0]
         self.right_units = [unit for unit in self.right_units if unit != 0]
 
-        for power in self.get_all_powers():
-            left_index = self.get_index_of_unit_of_power(power, self.left_units)
-            right_index = self.get_index_of_unit_of_power(power, self.right_units)
-            if left_index is None or right_index is None:
-                continue
-            self.left_units[left_index] -= self.right_units[right_index]
-            self.right_units.pop(right_index)
+        self.sort_expression()
 
         self.expression_simplified = True
 
@@ -94,6 +118,18 @@ class PolynomialExpression:
         """Resolve the polynome and display the solutions if there are any"""
         if self.expression_simplified is False:
             self.simplify_expression()
+
+        if verbose is True:
+            print(self)
+            degree = self.get_polynomial_degree()
+            if degree == 0:
+                print("Polynonial degree is 0.", "This equation is trivial and there is no solution.", sep='\n')
+            elif degree == 1:
+                print("Polynonial degree is 1.", "This equation has one solution -> [x = 0].", sep='\n')
+            else:
+                print("Polynonial degree is 2.",
+                      "This equation has a variable number of solutions, depending on it's delta.",
+                      sep='\n')
 
     class PolynomialUnit:
         """The PolynomialUnit class is used to represent a polynomial unit like '-5 * x^2'"""
@@ -117,7 +153,7 @@ class PolynomialExpression:
                 return self
             if other.power != self.power:
                 raise UnequalPowersException(self.__str__(), other.__str__())
-            return self.from_values(self.value + other.value, self.power)
+            return self.from_values(round(self.value + other.value, 3), self.power)
 
         def __radd__(self, other):
             return self.__add__(other)
@@ -127,7 +163,7 @@ class PolynomialExpression:
                 return self
             if other.power != self.power:
                 raise UnequalPowersException(self.__str__(), other.__str__())
-            return self.from_values(self.value - other.value, self.power)
+            return self.from_values(round(self.value - other.value, 3), self.power)
 
         def __rsub__(self, other):
             return other.__sub__(self)
