@@ -14,10 +14,10 @@ class UnequalPowersException(Exception):
 class InvalidExpressionException(Exception):
     """Custom error class that indicates that a given expression is invalid for some reasons"""
 
-    def __init__(self, expression: str, message="Given expression is invalid"):
+    def __init__(self, expression: str, message="Reason unknown"):
         self.expression = expression
         self.message = message
         super().__init__(self.message)
 
     def __str__(self):
-        return f"[[ {self.expression} ]] -> {self.message}"
+        return f"[[ {self.expression} ]] -> Given expression is invalid : {self.message}"

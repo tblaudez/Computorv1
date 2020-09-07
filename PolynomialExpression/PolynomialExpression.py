@@ -1,8 +1,8 @@
 from __future__ import annotations
 from .Exceptions import UnequalPowersException, InvalidExpressionException
 
-import typing
 import re
+import math
 
 
 class PolynomialExpression:
@@ -10,24 +10,14 @@ class PolynomialExpression:
     The PolynomialExpression class is used to represent a polynomial expression
     like '-5 * x^2 + 5 * x^1 = 4 * x^0'
     """
-    PATTERN = r"(([+\-] ?)?\d+(\.\d+)? ?\* ?x\^([+\-] ?)?\d+(\.\d+)?)"
+    PATTERN = r"(\d+(\.\d+)?( ?\* ?))?x(\^\d)?|\d+"
 
     def __init__(self, expression: str):
-        splited_expression = [units.strip() for units in expression.split('=')]
-        if len(splited_expression) != 2 \
-                or not re.match(self.PATTERN, splited_expression[0], flags=re.IGNORECASE) \
-                or not re.match(self.PATTERN, splited_expression[1], flags=re.IGNORECASE):
-            raise InvalidExpressionException(expression)
+        if expression.count('=') != 1:
+            raise InvalidExpressionException(expression, message="Invalid number of equal signs")
 
-        self.left_units = [self.PolynomialUnit(match[0])
-                           for match in re.findall(self.PATTERN, splited_expression[0], flags=re.IGNORECASE)]
-        self.right_units = [self.PolynomialUnit(match[0])
-                            for match in re.findall(self.PATTERN, splited_expression[1], flags=re.IGNORECASE)]
-        self.side_simplified = False
-        self.expression_simplified = False
-
-        if self.get_polynomial_degree() > 2:
-            raise InvalidExpressionException(expression, message="Polynomial degree is greater than 2")
+        self.left_units, self.right_units = self.parse_expression(expression)
+        self.simplified = False
 
     def __str__(self):
         left_units = " + ".join(f"[{unit}]" for unit in self.left_units) or "0"
@@ -38,98 +28,125 @@ class PolynomialExpression:
         return f"{{left_units: {self.left_units}," \
                f"right_units: {self.right_units}, " \
                f"polynomial_degree: {self.get_polynomial_degree()}" \
-               f"simplified: {self.expression_simplified}}}"
+               f"simplified: {self.simplified}}}"
 
     def get_polynomial_degree(self) -> float:
         """Get the degree of the polynomial equation"""
         return max([unit.power for unit in self.left_units + self.right_units] or [0])
 
-    def get_left_powers(self) -> typing.List[float]:
-        return sorted(list(set([unit.power for unit in self.left_units])))
-
-    def get_right_powers(self) -> typing.List[float]:
-        return sorted(list(set([unit.power for unit in self.right_units])))
-
-    def get_all_powers(self) -> typing.List[float]:
-        return sorted(list(set(self.get_left_powers() + self.get_right_powers())))
-
-    def get_index_of_unit_of_power(self, power: float, unit_list):
-        if self.side_simplified is False:
-            self._simplify_sides()
-        for index, unit in enumerate(unit_list):
-            if unit.power == power:
-                return index
-        return None
-
-    def sort_expression(self):
-        self.left_units.sort(key=lambda unit: unit.power)
-        self.right_units.sort(key=lambda unit: unit.power)
-
-    def _simplify_sides(self):
-        """Simplify a side of the expression by merging same-powered units"""
-        for unit_list in (self.left_units, self.right_units):
-            for power in sorted(list(set([unit.power for unit in unit_list]))):
-                simplified_unit = sum([unit for unit in unit_list if unit.power == power])
-                unit_list[:] = [unit for unit in unit_list if unit.power != power]
-                unit_list.append(simplified_unit)
-
-        self.side_simplified = True
-
     def simplify_expression(self):
         """Simplify the units of the polynome"""
 
-        # Merging same power polynomes in each sides
-        if self.side_simplified is False:
-            self._simplify_sides()
+        # Pass all units on the left side for simplification
+        self.left_units.extend([-unit for unit in self.right_units])
+        self.right_units = []
 
-        # Since sides are simplified, we assume that there is only one unit per power per side
-        for power in self.get_all_powers():
-            left_index = self.get_index_of_unit_of_power(power, self.left_units)
-            right_index = self.get_index_of_unit_of_power(power, self.right_units)
+        # Simplify the units by merging same-powered units
+        for power in sorted(list(set([unit.power for unit in self.left_units]))):
+            unit_of_power = [unit for unit in self.left_units if unit.power == power]
+            self.left_units = [unit for unit in self.left_units if unit not in unit_of_power]
+            self.left_units.append(sum(unit_of_power))
 
-            # If not unit of this power is found, do nothing
-            if left_index is None and right_index is None:
-                continue
-
-            # if units of this power is found left but not right, do nothing
-            elif left_index is not None and right_index is None:
-                continue
-
-            # if a unit of this power is found right but not left, pass it left
-            elif left_index is None and right_index is not None:
-                self.left_units.append(PolynomialExpression.PolynomialUnit
-                                       .from_values(-1 * self.right_units[right_index].value, power))
-                self.right_units.pop(right_index)
-
-            # if units of this power are found on both sides, simplify them
-            else:
-                self.left_units[left_index] -= self.right_units[right_index]
-                self.right_units.pop(right_index)
-
-        # Getting rid of 0-valued polynomes
+        # Remove 0-valued units
         self.left_units = [unit for unit in self.left_units if unit != 0]
-        self.right_units = [unit for unit in self.right_units if unit != 0]
 
-        self.sort_expression()
+        # Sort the units to have lowest power on the leftmost part of the expression
+        self.left_units.sort(key=lambda unit: unit.power, reverse=True)
 
-        self.expression_simplified = True
+        self.simplified = True
+
+    def get_equation_members(self):
+        if self.simplified is not True:
+            self.simplify_expression()
+
+        a = next((unit.value for unit in self.left_units if unit.power == 2), 0)
+        b = next((unit.value for unit in self.left_units if unit.power == 1), 0)
+        c = next((unit.value for unit in self.left_units if unit.power == 0), 0)
+
+        return a, b, c
 
     def resolve_polynome(self, verbose=False):
         """Resolve the polynome and display the solutions if there are any"""
-        if self.expression_simplified is False:
+        if self.simplified is not True:
             self.simplify_expression()
 
-        if verbose is True:
-            print(self)
-            degree = self.get_polynomial_degree()
-            if degree == 0:
-                print("Polynonial degree is 0.", "This equation is trivial and there is no solution.", sep='\n')
-            elif degree == 1:
-                print("Polynonial degree is 1.", "This equation has one solution -> [x = 0].", sep='\n')
+        degree = self.get_polynomial_degree()
+        if degree == 0:
+            print("Polynonial degree: 0", "This equation is trivial", sep='\n')
+            if len(self.left_units) == 0:
+                print("Every real number 'ℝ' could be a solution of this equation")
             else:
-                print("Polynonial degree is 2.",
-                      "This equation has a variable number of solutions, depending on it's delta.",
-                      sep='\n')
+                print("The equation cannot be solved for there is nothing to solve. It's just wrong.")
+            return
+
+        a, b, c = self.get_equation_members()
+        print(f"Reduced form : {self}", "", sep='\n')
+
+        if verbose is True:
+            print("A polynomial equation has the form 'ax² + bx + c = 0'",
+                  f"Here a is '{a}', b is '{b}' and c is '{c}'", "", sep='\n')
+
+        if degree == 1:
+            print("Polynonial degree: 1")
+            if verbose is True:
+                print("When polynomial degree is 1 the equation can simply be hand-resolved",
+                      "In this case 'x = -c/b'", sep='\n')
+            x = round(-c / b, 3)
+            x = int(x) if x.is_integer() else x
+            print(f"The solution is : {x}")
+
+        elif degree == 2:
+            print("Polynonial degree: 2")
+            discriminant = round(math.pow(b, 2) - (4 * a * c), 3)
+            discriminant = int(discriminant) if discriminant.is_integer() else discriminant
+
+            if verbose is True:
+                print("When polynonial degree is 2 the potential solutions are solved using "
+                      "something called the 'discriminant', written 'Δ'",
+                      "The discriminant formula is 'Δ = b² - 4ac'",
+                      f"In our situation, Δ is equal to '{discriminant}'", "", sep='\n')
+
+            if discriminant < 0:
+                print("The discriminant is strictly negative.")
+                if verbose is True:
+                    print("When the discriminant is strictly negative "
+                          "no solutions can be found on the real numbers realm 'ℝ'",
+                          "We need to use complex numbers (involving 'i') to find a solution to this equation",
+                          sep='\n')
+                import cmath
+                x1 = f"{complex(-b, round(math.sqrt(-discriminant), 3))} / {2 * a}".replace('j', 'i')
+                x2 = f"{complex(-b, -round(math.sqrt(-discriminant), 3))} / {2 * a}".replace('j', 'i')
+                print("There two solutions are :", x1, x2, sep='\n')
+
+            elif discriminant == 0:
+                x1 = round(-b / (2 * a), 3)
+                x1 = int(x1) if x1.is_integer() else x1
+                print("The discriminant is equal to 0")
+                if verbose is True:
+                    print("When the discriminant is equal to 0 there is one and only one solution to the equation",
+                          "In this case, the solution formula is 'x1 = -b/2a'", sep='\n')
+                print(f"The solution is : {x1}")
+
+            elif discriminant > 0:
+                x1 = round((-b - math.sqrt(discriminant)) / (2 * a), 3)
+                x1 = int(x1) if x1.is_integer() else x1
+                x2 = round((-b + math.sqrt(discriminant)) / (2 * a), 3)
+                x2 = int(x2) if x2.is_integer() else x2
+                print("The discriminant is strictly positive.")
+                if verbose is True:
+                    print("When the discriminant is strictly positive "
+                          "two solutions can be found using the discriminant itself",
+                          f"The solutions formulas are 'x1 = (-b - √Δ)/2a' and 'x2 = (-b + √Δ)/2a'", "", sep='\n')
+                print(f"The two solutions are :", x1, x2, sep='\n')
+
+        else:
+            print(f"Polynonial degree: {degree}")
+            if verbose is True:
+                print("When the polynonial degree is greater than 2 "
+                      "the equation cannot be solved using the discriminant only",
+                      "We would need to derivate the equation to the power of 2 to find its solutions", sep='\n')
+            else:
+                print("The polynomial degree is strictly greater than 2, I can't solve.")
 
     class PolynomialUnit:
         """The PolynomialUnit class is used to represent a polynomial unit like '-5 * x^2'"""
@@ -137,10 +154,12 @@ class PolynomialExpression:
         def __init__(self, polynome: str = None):
             if polynome is None:
                 return
-            self.value = float(polynome.split('*')[0].replace(' ', ''))
-            self.value = int(self.value) if self.value.is_integer() else self.value
-            self.power = float(polynome.split('^')[1].replace(' ', ''))
-            self.power = int(self.power) if self.power.is_integer() else self.power
+
+            self.value = round(float(polynome.split('*')[0].replace(' ', '')), 3)
+            if self.value.is_integer():
+                self.value = int(self.value)
+
+            self.power = int(polynome.split('^')[1].replace(' ', ''))
 
         def __str__(self):
             return f"{self.value} * x^{self.power}"
@@ -177,6 +196,9 @@ class PolynomialExpression:
 
         def __ne__(self, other):
             return not self.__eq__(other)
+
+        def __neg__(self):
+            return PolynomialExpression.PolynomialUnit.from_values(-self.value, self.power)
 
         @classmethod
         def from_values(cls, value: float, power: float) -> PolynomialExpression.PolynomialUnit:
