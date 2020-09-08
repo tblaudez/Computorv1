@@ -1,29 +1,23 @@
 #!/usr/local/bin/python3
 
 import PolynomialExpression as Pe
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Simplify and resolve a polynomial equation of maximum degree 2')
+    parser.add_argument("expression", help="The expression to be resolved, ex: '5*x^2 + 7 = 0'",
+                        type=str, metavar='<expression>')
+    parser.add_argument("-v", "--verbose", help="Increase the verbosity of the resolution of the equation",
+                        action="store_true")
+    return parser.parse_args()
+
 
 if __name__ == '__main__':
-    # if len(sys.argv) == 1:
-    #     print("Usage: ./computor.py <equation>")
-    #     exit(1)
+    args = parse_args()
 
-
-    def get_polynomial_side() -> str:
-        import random
-
-        side = ""
-        for _ in range(6):
-            value = round(random.uniform(-999, 999), 3)
-            power = random.randint(0, 2)
-            side += f"{'+' if value > 0 else ''}{value}*x^{power} "
-
-        return side
-
-
-    # stdin = get_polynomial_side() + "= " + get_polynomial_side()
-    stdin = "+5 + x -x^2 +4*x = 0"
     try:
-        expression = Pe.PolynomialExpression(stdin)
-        #expression.resolve_polynome(verbose=True)
+        expression = Pe.PolynomialExpression(args.expression)
+        expression.resolve_polynomial(args.verbose)
     except Pe.InvalidExpressionException or Pe.UnequalPowersException as e:
         print(f"{type(e).__name__} - {e}")
